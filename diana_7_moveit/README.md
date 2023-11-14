@@ -17,5 +17,5 @@ sudo apt-get install ros-humble-moveit
 sudo apt-get install ros-humble-joint-state-publisher-gui
 sudo apt-get install ros-humble-ros-controllers
 ```
-##示意
+## 示意
 <img src="https://github.com/rocos-sia/Diana_7_ros2/blob/main/Figures/diana_7_moveit.png" alt="show" />
