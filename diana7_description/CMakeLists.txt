@@ -13,7 +13,7 @@ find_package(ament_cmake REQUIRED)
 
 
 install(DIRECTORY
-  config
+  #config
   launch
   meshes
   urdf

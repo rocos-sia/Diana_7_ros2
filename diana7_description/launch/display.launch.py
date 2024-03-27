@@ -16,12 +16,12 @@ def generate_launch_description():
         executable='robot_state_publisher',
         arguments=[urdf_model_path]
     )
-    joint_state_publisher_node = Node (
-    package ='joint_state_publisher_gui',
-    executable ='joint_state_publisher_gui',
-    name ='joint_state_publisher_gui',
-    arguments =[ urdf_model_path ]
-    )
+    # joint_state_publisher_node = Node (
+    # package ='joint_state_publisher_gui',
+    # executable ='joint_state_publisher_gui',
+    # name ='joint_state_publisher_gui',
+    # arguments =[ urdf_model_path ]
+    # )
 
     rviz2_node = Node(
         package='rviz2',
@@ -30,6 +30,6 @@ def generate_launch_description():
         output='screen',
     )
     ld . add_action(robot_state_publisher_node)
-    ld . add_action ( joint_state_publisher_node )
+    # ld . add_action ( joint_state_publisher_node )
     ld . add_action(rviz2_node)
     return ld
