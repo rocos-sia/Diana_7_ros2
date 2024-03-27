@@ -144,8 +144,28 @@ void wait_move(const char *strIpAddress)
     }
     stop(strIpAddress);
 }
+void signalHandler(int signo)
+{
+    if (signo == SIGINT)
+    {
+        std::cout << "\033[1;31m"
+                  << "[!!SIGNAL!!]"
+                  << "INTERRUPT by CTRL-C"
+                  << "\033[0m" << std::endl;
+
+        isRunning = false;
+        exit(0);
+    }
+}
 int main(int argc, char const *argv[])
 {
+    // 信号处理
+    if (signal(SIGINT, signalHandler) == SIG_ERR)
+    {
+        std::cout << "\033[1;31m"
+                  << "Can not catch SIGINT"
+                  << "\033[0m" << std::endl;
+    }
     // ROS2初始化
     rclcpp::init(argc, argv);
     auto node = rclcpp::Node::make_shared("joint_state_publisher");
