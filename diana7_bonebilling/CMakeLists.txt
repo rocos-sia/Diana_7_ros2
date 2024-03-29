@@ -19,12 +19,13 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 add_executable(joint_state_publisher src/sensor.cpp)
 #target_link_libraries(talker  ${catkin_LIBRARIES} rocos::hardware rocos::kinematics rocos::drive rocos::protocol rocos::robot  Eigen3::Eigen gflags::gflags )
-target_link_libraries(joint_state_publisher  ${catkin_LIBRARIES} DianaApi BasicSdk GenericAlgorithm ToolSdk xml2 Boost::system Boost::thread Threads::Threads orocos-kdl )
+target_link_libraries(joint_state_publisher  ${catkin_LIBRARIES} DianaApi BasicSdk GenericAlgorithm ToolSdk xml2 Boost::system Boost::thread Threads::Threads orocos-kdl  yaml-cpp)
 #ament_target_dependencies(talker rclcpp std_msgs sensor_msgs)
 ament_target_dependencies(joint_state_publisher rclcpp std_msgs sensor_msgs)
 

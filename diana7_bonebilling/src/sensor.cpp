@@ -8,6 +8,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "yaml-cpp/yaml.h"
 using namespace SRI;
 #define JOINT_NUM 7
 bool isRunning = true;
@@ -18,6 +19,7 @@ double enable_wrench[6] = {0};
 // double zero_offset[6] = {-3.0987, -1.25601, 14.1741, -0.000, 0.000, 0.000};
 bool isFtSensor = false;
 bool noError = true;
+YAML::Node yaml_node;
 
 void rtDataHandler(std::vector<RTData<float>> &rtData)
 {
@@ -159,6 +161,8 @@ void signalHandler(int signo)
 }
 int main(int argc, char const *argv[])
 {
+    //yaml初始化
+    yaml_node = YAML::LoadFile(yaml_path);
     // 信号处理
     if (signal(SIGINT, signalHandler) == SIG_ERR)
     {
@@ -225,14 +229,14 @@ int main(int argc, char const *argv[])
     {
         auto rtData = sensor.getRealTimeDataOnce<float>(rtMode, rtDataValid);
 
-        for (int i = 0; i < rtData.size(); i++)
+        for (int j = 0; j< rtData.size(); j++)
         {
-            enable_wrench[0] += rtData[i][0];
-            enable_wrench[1] += rtData[i][1];
-            enable_wrench[2] += rtData[i][2];
-            enable_wrench[3] += rtData[i][3];
-            enable_wrench[4] += rtData[i][4];
-            enable_wrench[5] += rtData[i][5];
+            enable_wrench[0] += rtData[j][0];
+            enable_wrench[1] += rtData[j][1];
+            enable_wrench[2] += rtData[j][2];
+            enable_wrench[3] += rtData[j][3];
+            enable_wrench[4] += rtData[j][4];
+            enable_wrench[5] += rtData[j][5];
         }
     }
     enable_wrench[0] /= sum;
@@ -250,7 +254,17 @@ int main(int argc, char const *argv[])
 
     // 向量平面确定
     KDL::Vector p(poses[0], poses[1], poses[2]);
+    //normal.yaml数据读取
     KDL::Vector normal(0, 1, 1);
+    if (yaml_node["normal"]) {
+        std::vector<double> normal_data = yaml_node["normal"].as<std::vector<double>>();
+        normal=KDL::Vector(normal_data[0],normal_data[1],normal_data[2]);
+    }
+    else{
+        std::cout << "normal.yaml文件中没有normal数据,默认为0,1,1" << std::endl;
+    }
+    
+    
     KDL::Frame frame = calplat(normal, p);
     KDL::Vector r = frame.M.GetRot();
     // KDL::Wrench wrench;
@@ -268,14 +282,14 @@ int main(int argc, char const *argv[])
     {
         auto rtData = sensor.getRealTimeDataOnce<float>(rtMode, rtDataValid);
 
-        for (int i = 0; i < rtData.size(); i++)
+        for (int j = 0; j < rtData.size(); j++)
         {
-            enable_wrench[0] += rtData[i][0];
-            enable_wrench[1] += rtData[i][1];
-            enable_wrench[2] += rtData[i][2];
-            enable_wrench[3] += rtData[i][3];
-            enable_wrench[4] += rtData[i][4];
-            enable_wrench[5] += rtData[i][5];
+            enable_wrench[0] += rtData[j][0];
+            enable_wrench[1] += rtData[j][1];
+            enable_wrench[2] += rtData[j][2];
+            enable_wrench[3] += rtData[j][3];
+            enable_wrench[4] += rtData[j][4];
+            enable_wrench[5] += rtData[j][5];
         }
     }
     enable_wrench[0] /= sum;
@@ -325,6 +339,14 @@ int main(int argc, char const *argv[])
             wrench_compensation = gravityCompensation(poses, enable_wrench, Zero_offset, mass, center_of_mass_position);
             // wrench_compensation.force.x(0);
             // wrench_compensation.force.y(0);
+            if(abs(wrench_compensation.force.x())<0.5)
+            {
+                wrench_compensation.force.x(0);
+            }
+            if(abs(wrench_compensation.force.y())<0.5)
+            {
+                wrench_compensation.force.y(0);
+            }
             wrench_compensation.force.z(0);
             wrench_compensation.torque.x(0);
             wrench_compensation.torque.y(0);
