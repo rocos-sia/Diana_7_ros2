@@ -19,6 +19,7 @@ double enable_wrench[6] = {0};
 // double zero_offset[6] = {-3.0987, -1.25601, 14.1741, -0.000, 0.000, 0.000};
 bool isFtSensor = false;
 bool noError = true;
+std::string yaml_path = "normal.yaml";
 YAML::Node yaml_node;
 
 void rtDataHandler(std::vector<RTData<float>> &rtData)
