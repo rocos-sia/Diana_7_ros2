@@ -7,8 +7,13 @@
 #include <kdl/frames.hpp>
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "geometry_msgs/msg/polygon_stamped.hpp"
+#include "geometry_msgs/msg/wrench.hpp"
+#include "geometry_msgs/msg/wrench_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "yaml-cpp/yaml.h"
+#include "Iir.h"
+
 using namespace SRI;
 #define JOINT_NUM 7
 bool isRunning = true;
@@ -19,12 +24,18 @@ double enable_wrench[6] = {0};
 // double zero_offset[6] = {-3.0987, -1.25601, 14.1741, -0.000, 0.000, 0.000};
 bool isFtSensor = false;
 bool noError = true;
+std::string yaml_path = "normal.yaml";
 YAML::Node yaml_node;
+// auto node;
+rclcpp::Node::SharedPtr node;
 
 void rtDataHandler(std::vector<RTData<float>> &rtData)
 {
     isFtSensor = true;
-    static int i = 0;
+
+    // rclcpp::Time current_time =node->get_clock()->now();
+    // rclcpp::Duration duration = rclcpp::Duration::from_seconds(global_publish_frequency);
+
     // std::cout << "[" << i << "] RT Data is ->  ";
     for (int i = 0; i < rtData.size(); i++)
     {
@@ -33,9 +44,9 @@ void rtDataHandler(std::vector<RTData<float>> &rtData)
             // std::cout << "Ch " << j << ": " << rtData[i][j] << "\t";
             enable_wrench[j] = rtData[i][j];
         }
-        // std::cout << std::endl;
     }
 }
+
 void logRobotState(StrRobotStateInfo *pinfo, const char *strIpAddress)
 {
 }
@@ -159,9 +170,13 @@ void signalHandler(int signo)
         exit(0);
     }
 }
+template <typename T>
+int sign(T val) {
+    return (val > T(0)) - (val < T(0));
+}
 int main(int argc, char const *argv[])
 {
-    //yaml初始化
+    // yaml初始化
     yaml_node = YAML::LoadFile(yaml_path);
     // 信号处理
     if (signal(SIGINT, signalHandler) == SIG_ERR)
@@ -172,12 +187,28 @@ int main(int argc, char const *argv[])
     }
     // ROS2初始化
     rclcpp::init(argc, argv);
-    auto node = rclcpp::Node::make_shared("joint_state_publisher");
+    node = rclcpp::Node::make_shared("joint_state_publisher");
     rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr publisher;
     publisher = node->create_publisher<sensor_msgs::msg::JointState>("joint_states", 10);
-
+    auto wrench_z = node->create_publisher<geometry_msgs::msg::WrenchStamped>("wrench_z", 10);
+    auto wrench_xy = node->create_publisher<geometry_msgs::msg::WrenchStamped>("wrench_xy", 10);
+    auto plane_xy = node->create_publisher<geometry_msgs::msg::PolygonStamped>("plane_xy", 10);
     rclcpp::WallRate loop_rate(500); // 1 Hz publishing rate
-
+    geometry_msgs::msg::WrenchStamped wrench_msg_z;
+    geometry_msgs::msg::WrenchStamped wrench_msg_xy;
+    geometry_msgs::msg::PolygonStamped plane_msg_xy;
+    plane_msg_xy.header.stamp = node->get_clock()->now();
+    wrench_msg_xy.header.stamp = node->get_clock()->now();
+    wrench_msg_xy.header.frame_id = "link_7";
+    wrench_msg_z.header.stamp = node->get_clock()->now();
+    wrench_msg_z.header.frame_id = "link_7";
+    // 低通滤波器
+    std::array<Iir::Butterworth::LowPass<2>, 3> filter_array{};
+    const float samplingrate = 200;    // Hz
+    const float cutoff_frequency = 5; // Hz
+    filter_array[0].setup(2, samplingrate, cutoff_frequency);
+    filter_array[1].setup(2, samplingrate, cutoff_frequency);
+    filter_array[2].setup(2, samplingrate, cutoff_frequency);
     // 传感器初始化
     SRI::CommEthernet *ce = new SRI::CommEthernet("192.168.2.109", 4008);
     SRI::FTSensor sensor(ce);
@@ -229,7 +260,7 @@ int main(int argc, char const *argv[])
     {
         auto rtData = sensor.getRealTimeDataOnce<float>(rtMode, rtDataValid);
 
-        for (int j = 0; j< rtData.size(); j++)
+        for (int j = 0; j < rtData.size(); j++)
         {
             enable_wrench[0] += rtData[j][0];
             enable_wrench[1] += rtData[j][1];
@@ -254,17 +285,18 @@ int main(int argc, char const *argv[])
 
     // 向量平面确定
     KDL::Vector p(poses[0], poses[1], poses[2]);
-    //normal.yaml数据读取
+    // normal.yaml数据读取
     KDL::Vector normal(0, 1, 1);
-    if (yaml_node["normal"]) {
+    if (yaml_node["normal"])
+    {
         std::vector<double> normal_data = yaml_node["normal"].as<std::vector<double>>();
-        normal=KDL::Vector(normal_data[0],normal_data[1],normal_data[2]);
+        normal = KDL::Vector(normal_data[0], normal_data[1], normal_data[2]);
     }
-    else{
+    else
+    {
         std::cout << "normal.yaml文件中没有normal数据,默认为0,1,1" << std::endl;
     }
-    
-    
+
     KDL::Frame frame = calplat(normal, p);
     KDL::Vector r = frame.M.GetRot();
     // KDL::Wrench wrench;
@@ -309,7 +341,43 @@ int main(int argc, char const *argv[])
     double rot_poses[6] = {0.0};
     KDL::Frame TCP_base = KDL::Frame(KDL::Rotation::Rot(axis, norm), KDL::Vector(poses[0], poses[1], poses[2]));
     sensor.startRealTimeDataRepeatedly<float>(&rtDataHandler, rtMode, rtDataValid);
+    // 任意四个点确定一个平面
+    double plane_length = 0.2;
+    KDL::Frame p1 = TCP_base * KDL::Frame(KDL::Vector(plane_length, plane_length, 0));
+    KDL::Frame p2 = TCP_base * KDL::Frame(KDL::Vector(-plane_length, plane_length, 0));
+    KDL::Frame p3 = TCP_base * KDL::Frame(KDL::Vector(-plane_length, -plane_length, 0));
+    KDL::Frame p4 = TCP_base * KDL::Frame(KDL::Vector(plane_length, -plane_length, 0));
+    geometry_msgs::msg::Point32 point1;
+    geometry_msgs::msg::Point32 point2;
+    geometry_msgs::msg::Point32 point3;
+    geometry_msgs::msg::Point32 point4;
 
+    point1.x = p1.p.x();
+    point1.y = p1.p.y();
+    point1.z = p1.p.z();
+    point2.x = p2.p.x();
+    point2.y = p2.p.y();
+    point2.z = p2.p.z();
+    point3.x = p3.p.x();
+    point3.y = p3.p.y();
+    point3.z = p3.p.z();
+    point4.x = p4.p.x();
+    point4.y = p4.p.y();
+    point4.z = p4.p.z();
+    plane_msg_xy.header.frame_id = "base"; // 设置坐标系为 "map"
+
+    // 添加多边形顶点
+    // plane_msg_xy.polygon.points.resize(4);
+    plane_msg_xy.polygon.points.push_back(point1);
+    plane_msg_xy.polygon.points.push_back(point2);
+    plane_msg_xy.polygon.points.push_back(point3);
+    plane_msg_xy.polygon.points.push_back(point4);
+    //上一时刻的力和力矩
+    KDL::Wrench last_wrench;
+    last_wrench.force.x(0);
+    last_wrench.force.y(0);
+    last_wrench.force.z(0);
+    KDL::Wrench wrench_d;
     while (isRunning)
     {
         if (getRobotState(strIpAddress) == 6)
@@ -332,21 +400,67 @@ int main(int argc, char const *argv[])
         joint_state_.header.stamp = node->get_clock()->now();
 
         publisher->publish(joint_state_);
+        plane_msg_xy.header.stamp = node->get_clock()->now();
+        // plane_msg_xy.polygon.points.push_back(point1);
+        // plane_msg_xy.polygon.points.push_back(point2);
+        // plane_msg_xy.polygon.points.push_back(point3);
+        // plane_msg_xy.polygon.points.push_back(point4);
+        plane_xy->publish(plane_msg_xy);
 
         if (noError)
         {
             // wrench_compensation.force.y(1);
             wrench_compensation = gravityCompensation(poses, enable_wrench, Zero_offset, mass, center_of_mass_position);
-            // wrench_compensation.force.x(0);
-            // wrench_compensation.force.y(0);
-            if(abs(wrench_compensation.force.x())<0.5)
+            wrench_compensation.force.x(filter_array[0].filter(wrench_compensation.force.x()));
+            wrench_compensation.force.y(filter_array[1].filter(wrench_compensation.force.y()));
+            wrench_compensation.force.z(filter_array[2].filter(wrench_compensation.force.z()));
+            wrench_d.force.x((wrench_compensation.force.x() - last_wrench.force.x())*200);
+            wrench_d.force.y((wrench_compensation.force.y() - last_wrench.force.y())*200);
+            wrench_d.force.z((wrench_compensation.force.z() - last_wrench.force.z())*200);
+            last_wrench = wrench_compensation;
+            if(abs(wrench_d.force.x()) > 100)
+            {
+                wrench_compensation.force.x(0*sign(wrench_compensation.force.x()));
+                std::cerr<<"x方向发生碰撞: "<<1*sign(wrench_compensation.force.x())<<"last_wrench:"<<last_wrench.force.x()<<std::endl;
+                getTcpPos(poses, strIpAddress);
+            }
+            if(abs(wrench_d.force.y()) > 100)
+            {
+                wrench_compensation.force.y(0*sign(wrench_compensation.force.y()));
+                std::cerr<<"y方向发生碰撞"  << 0*sign(wrench_compensation.force.y()) << std::endl;
+                getTcpPos(poses, strIpAddress);
+            }
+            if(abs(wrench_d.force.z() )> 300)
+            {
+                wrench_compensation.force.z(0*sign(wrench_compensation.force.z()));
+                std::cerr<<"z方向发生碰撞"  << std::endl;
+                // getTcpPos(poses, strIpAddress);
+            }
+            
+            
+
+            if (abs(wrench_compensation.force.x()) < 0.5)
             {
                 wrench_compensation.force.x(0);
             }
-            if(abs(wrench_compensation.force.y())<0.5)
+            if (abs(wrench_compensation.force.y()) < 0.5)
             {
                 wrench_compensation.force.y(0);
             }
+
+            KDL::Wrench wrench_temp = KDL::Rotation::RPY(PI, 0, 0) * wrench_compensation;
+            // wrench_compensation.force.x(0);
+            // wrench_compensation.force.y(0);
+            wrench_msg_z.header.stamp = node->get_clock()->now();
+
+            wrench_msg_z.wrench.force.z = wrench_temp.force.z();
+            wrench_msg_xy.header.stamp = node->get_clock()->now();
+            wrench_msg_xy.wrench.force.x = wrench_temp.force.x();
+            wrench_msg_xy.wrench.force.y = wrench_temp.force.y();
+
+            wrench_z->publish(wrench_msg_z);
+            wrench_xy->publish(wrench_msg_xy);
+
             wrench_compensation.force.z(0);
             wrench_compensation.torque.x(0);
             wrench_compensation.torque.y(0);
@@ -392,7 +506,7 @@ int main(int argc, char const *argv[])
 
             cleanErrorInfo(strIpAddress);
             setLastError(0, strIpAddress);
-            std::cout << "Clear Error!!" << std::endl;
+            // std::cout << "Clear Error!!" << std::endl;
 
             usleep(1000);
         }

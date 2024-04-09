@@ -10,6 +10,8 @@ include_directories(DianaApi/include)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/DianaApi/bin)
 link_directories(${CMAKE_CURRENT_SOURCE_DIR}/DianaApi/lib)
+
+
 # find_library(DianaApi_LIBRARY NAMES DianaApi BasicSdk GenericAlgorithm ToolSdk xml2 HINTS ${CMAKE_CURRENT_SOURCE_DIR}/DianaApi/lib  ${CMAKE_CURRENT_SOURCE_DIR}/DianaApi/bin)
 find_package(Threads)
 find_package(Boost REQUIRED COMPONENTS system thread)
@@ -23,16 +25,18 @@ find_package(yaml-cpp REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
+add_subdirectory(3rdparty/filter_iir)
+
 add_executable(joint_state_publisher src/sensor.cpp)
 #target_link_libraries(talker  ${catkin_LIBRARIES} rocos::hardware rocos::kinematics rocos::drive rocos::protocol rocos::robot  Eigen3::Eigen gflags::gflags )
-target_link_libraries(joint_state_publisher  ${catkin_LIBRARIES} DianaApi BasicSdk GenericAlgorithm ToolSdk xml2 Boost::system Boost::thread Threads::Threads orocos-kdl  yaml-cpp)
+target_link_libraries(joint_state_publisher  ${catkin_LIBRARIES} DianaApi BasicSdk GenericAlgorithm ToolSdk xml2 Boost::system Boost::thread Threads::Threads orocos-kdl  yaml-cpp filter_iir)
 #ament_target_dependencies(talker rclcpp std_msgs sensor_msgs)
-ament_target_dependencies(joint_state_publisher rclcpp std_msgs sensor_msgs)
+ament_target_dependencies(joint_state_publisher rclcpp std_msgs sensor_msgs geometry_msgs)
 
 install(TARGETS
-joint_state_publisher
+joint_state_publisher filter_iir
   DESTINATION lib/${PROJECT_NAME})
-install(DIRECTORY include DianaApi
+install(DIRECTORY include DianaApi 3rdparty
   DESTINATION share/${PROJECT_NAME})
 
 
