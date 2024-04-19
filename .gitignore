@@ -1,3 +1,7 @@
 diana7_bonebilling/3rdparty/
 diana7_bonebilling/.vscode/settings.json
+<<<<<<< Updated upstream
 diana7_bonebilling/3rdparty/filter_iir/CMakeLists.txt
+=======
+.vscode/settings.json
+>>>>>>> Stashed changes

@@ -13,6 +13,10 @@
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "yaml-cpp/yaml.h"
 #include "Iir.h"
+<<<<<<< Updated upstream
+=======
+#include <cmath>  // 包含这个头文件以使用 std::pow
+>>>>>>> Stashed changes
 
 using namespace SRI;
 #define JOINT_NUM 7
@@ -178,6 +182,7 @@ int main(int argc, char const *argv[])
 {
     // yaml初始化
     yaml_node = YAML::LoadFile(yaml_path);
+    std::cout << "normal.yaml文件读取成功" << std::endl;
     // 信号处理
     if (signal(SIGINT, signalHandler) == SIG_ERR)
     {
@@ -222,6 +227,7 @@ int main(int argc, char const *argv[])
     pinfo->LocHeartbeatPort = 0;
     pinfo->LocRobotStatePort = 0;
     pinfo->LocSrvPort = 0;
+    std::cout << "initSrv" << std::endl;
     int ret = initSrv(errorControl, logRobotState, pinfo);
     if (ret < 0)
     {
@@ -234,12 +240,15 @@ int main(int argc, char const *argv[])
     }
     //
     releaseBrake(strIpAddress);
-
+    std::cout<<"releaseBrake"<<std::endl;
     const double PI = 3.141592653;
     double joints[7] = {0, 0, 0, PI / 2, 0, -PI / 2, 0}; // 以 7 轴机器人为例
 
     // double joints[JOINT_NUM] = {0.0};
     double poses[6] = {0.0};
+    double last_poses[6] = {0.0};
+    double last_real_poses[6] = {0.0};
+    double real_poses[6] = {0.0};
     // 初始点位
     moveJToTarget(joints, 0.5, 0.5, 0, 0, 0, strIpAddress);
     wait_move(strIpAddress);
@@ -331,9 +340,13 @@ int main(int argc, char const *argv[])
     enable_wrench[4] /= sum;
     enable_wrench[5] /= sum;
     getTcpPos(poses, strIpAddress);
+    // Todo
+    last_real_poses[0]=poses[0];
+    real_poses[0]=poses[0];
+    //
     KDL::Wrench wrench_compensation = gravityCompensation(poses, enable_wrench, Zero_offset, mass, center_of_mass_position);
     std::cout << "wrench_compensation: " << wrench_compensation.force.data[0] << "," << wrench_compensation.force.data[1] << "," << wrench_compensation.force.data[2] << "," << wrench_compensation.torque.data[0] << "," << wrench_compensation.torque.data[1] << "," << wrench_compensation.torque.data[2] << std::endl;
-    double B = 10000.0;
+    double B = 20000.0;
     KDL::Rotation f_tcp = KDL::Rotation::RPY(PI, 0, 0);
     // getTcpPos(poses, strIpAddress);
     KDL::Vector axis = KDL::Vector(poses[3], poses[4], poses[5]);
@@ -342,7 +355,11 @@ int main(int argc, char const *argv[])
     KDL::Frame TCP_base = KDL::Frame(KDL::Rotation::Rot(axis, norm), KDL::Vector(poses[0], poses[1], poses[2]));
     sensor.startRealTimeDataRepeatedly<float>(&rtDataHandler, rtMode, rtDataValid);
     // 任意四个点确定一个平面
+<<<<<<< Updated upstream
     double plane_length = 0.2;
+=======
+    double plane_length = 0.5;
+>>>>>>> Stashed changes
     KDL::Frame p1 = TCP_base * KDL::Frame(KDL::Vector(plane_length, plane_length, 0));
     KDL::Frame p2 = TCP_base * KDL::Frame(KDL::Vector(-plane_length, plane_length, 0));
     KDL::Frame p3 = TCP_base * KDL::Frame(KDL::Vector(-plane_length, -plane_length, 0));
@@ -351,6 +368,40 @@ int main(int argc, char const *argv[])
     geometry_msgs::msg::Point32 point2;
     geometry_msgs::msg::Point32 point3;
     geometry_msgs::msg::Point32 point4;
+<<<<<<< Updated upstream
+=======
+
+    point1.x = p1.p.x();
+    point1.y = p1.p.y();
+    point1.z = p1.p.z();
+    point2.x = p2.p.x();
+    point2.y = p2.p.y();
+    point2.z = p2.p.z();
+    point3.x = p3.p.x();
+    point3.y = p3.p.y();
+    point3.z = p3.p.z();
+    point4.x = p4.p.x();
+    point4.y = p4.p.y();
+    point4.z = p4.p.z();
+    plane_msg_xy.header.frame_id = "base"; // 设置坐标系为 "map"
+
+    // 添加多边形顶点
+    // plane_msg_xy.polygon.points.resize(4);
+    plane_msg_xy.polygon.points.push_back(point1);
+    plane_msg_xy.polygon.points.push_back(point2);
+    plane_msg_xy.polygon.points.push_back(point3);
+    plane_msg_xy.polygon.points.push_back(point4);
+    //上一时刻的力和力矩
+    KDL::Wrench last_wrench;
+    last_wrench.force.x(0);
+    last_wrench.force.y(0);
+    last_wrench.force.z(0);
+    KDL::Wrench wrench_d;
+    // !后期删除
+    last_poses[0] = poses[0];
+    last_poses[1] = poses[1];
+    last_poses[2] = poses[2];
+>>>>>>> Stashed changes
 
     point1.x = p1.p.x();
     point1.y = p1.p.y();
@@ -410,10 +461,12 @@ int main(int argc, char const *argv[])
         if (noError)
         {
             // wrench_compensation.force.y(1);
+            // TODO 环境刚度判断碰撞
             wrench_compensation = gravityCompensation(poses, enable_wrench, Zero_offset, mass, center_of_mass_position);
             wrench_compensation.force.x(filter_array[0].filter(wrench_compensation.force.x()));
             wrench_compensation.force.y(filter_array[1].filter(wrench_compensation.force.y()));
             wrench_compensation.force.z(filter_array[2].filter(wrench_compensation.force.z()));
+<<<<<<< Updated upstream
             wrench_d.force.x((wrench_compensation.force.x() - last_wrench.force.x())*200);
             wrench_d.force.y((wrench_compensation.force.y() - last_wrench.force.y())*200);
             wrench_d.force.z((wrench_compensation.force.z() - last_wrench.force.z())*200);
@@ -436,6 +489,31 @@ int main(int argc, char const *argv[])
                 std::cerr<<"z方向发生碰撞"  << std::endl;
                 // getTcpPos(poses, strIpAddress);
             }
+=======
+
+            // wrench_d.force.x((wrench_compensation.force.x() - last_wrench.force.x())*200);
+            // wrench_d.force.y((wrench_compensation.force.y() - last_wrench.force.y())*200);
+            // wrench_d.force.z((wrench_compensation.force.z() - last_wrench.force.z())*200);
+            // last_wrench = wrench_compensation;
+            // if(abs(wrench_d.force.x()) > 100)
+            // {
+            //     wrench_compensation.force.x(0*sign(wrench_compensation.force.x()));
+            //     std::cerr<<"x方向发生碰撞: "<<1*sign(wrench_compensation.force.x())<<"last_wrench:"<<last_wrench.force.x()<<std::endl;
+            //     getTcpPos(poses, strIpAddress);
+            // }
+            // if(abs(wrench_d.force.y()) > 100)
+            // {
+            //     wrench_compensation.force.y(0*sign(wrench_compensation.force.y()));
+            //     std::cerr<<"y方向发生碰撞"  << 0*sign(wrench_compensation.force.y()) << std::endl;
+            //    
+            // }
+            // if(abs(wrench_d.force.z() )> 300)
+            // {
+            //     wrench_compensation.force.z(0*sign(wrench_compensation.force.z()));
+            //     std::cerr<<"z方向发生碰撞"  << std::endl;
+            //     // getTcpPos(poses, strIpAddress);
+            // }
+>>>>>>> Stashed changes
             
             
 
@@ -466,10 +544,59 @@ int main(int argc, char const *argv[])
             wrench_compensation.torque.y(0);
             wrench_compensation.torque.z(0);
             KDL::Wrench wrench_base = TCP_base.M * f_tcp * wrench_compensation;
-
+            
+            // !TEST 
+            getTcpPos(real_poses, strIpAddress);
+            // 环境刚度判断，力的前后之差除以实际位置的偏差
+            // 当实际的位置和上次位置之差变换很小时，不进行碰撞检测判断。
             poses[0] += wrench_base.force.x() / B;
             poses[1] += wrench_base.force.y() / B;
             poses[2] += wrench_base.force.z() / B;
+            double factor=1.0;
+            if(abs(real_poses[0]-last_real_poses[0])>0.00001)
+            {
+                double K_exit=abs(wrench_base.force.x()-last_wrench.force.x())/abs(last_real_poses[0]-real_poses[0]);
+                if(K_exit>40000)
+                {
+                    std::cout<<"collision is detection, K_exit is "<<K_exit<<std::endl;
+                    int n=10;
+                    double K_lim=5*1e10;
+                    factor = std::pow(( K_lim-K_exit) / K_lim, n);
+                    std::cout<<"factorx is "<<1-factor<<std::endl;
+                     getTcpPos(poses, strIpAddress);
+                    
+                    // poses[0] += wrench_base.force.x() / B*(1-factor);
+                    
+                }
+                
+            }
+            if(abs(real_poses[1]-last_real_poses[1])>0.00001)
+            {
+                double K_exit=abs(wrench_base.force.y()-last_wrench.force.y())/abs(last_real_poses[1]-real_poses[1]);
+                if(K_exit>40000)
+                {
+                    std::cout<<"collision is detection, K_exit is "<<K_exit<<std::endl;
+                    int n=5;
+                    double K_lim=5*1e8;
+                    factor = std::pow(( K_lim-K_exit) / K_lim, n);
+                    std::cout<<"factory is "<<1-factor<<std::endl;
+                    getTcpPos(poses, strIpAddress);
+                    // poses[1] += wrench_base.force.y() / B*(1-factor);
+                }
+                
+            }
+            last_real_poses[0]=real_poses[0];
+            last_wrench=wrench_base;
+
+            
+           
+
+            last_poses[0] = poses[0];
+            last_poses[1] = poses[1];
+            last_poses[2] = poses[2];
+
+            
+           
 
             // getTcpPos(rot_poses, strIpAddress);
             axis = KDL::Vector(poses[3], poses[4], poses[5]);
